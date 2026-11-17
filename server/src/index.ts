@@ -1,14 +1,20 @@
 import { createApp } from "./app.js";
 import { config } from "./config.js";
 import { openDatabase } from "./db/connection.js";
+import { createItemsRepo } from "./db/itemsRepo.js";
 import { applySchema } from "./db/schema.js";
 import { logger } from "./lib/logger.js";
+import { createIngestionService } from "./services/ingestion.js";
 
 const db = openDatabase(config.dbPath);
 applySchema(db);
 logger.info({ dbPath: config.dbPath }, "Database ready");
 
-const server = createApp().listen(config.port, () => {
+// Composition root: build each dependency once and pass it down.
+const itemsRepo = createItemsRepo(db);
+const ingestion = createIngestionService({ itemsRepo, logger });
+
+const server = createApp({ ingestion }).listen(config.port, () => {
   logger.info({ port: config.port }, "Server listening");
 });
 
