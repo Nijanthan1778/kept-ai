@@ -33,12 +33,16 @@ export function normalizeText(text: string): string {
 
 /**
  * textContent alone glues blocks together ("Heading</h2><p>Text" → "HeadingText"),
- * so mark the end of every block element with a paragraph break first.
+ * so put a paragraph break on both sides of every block element first. Both sides matter:
+ * loose text right before a block ("July 2023<p>If you…") would otherwise run into it.
  */
 function textWithBlockBreaks(root: Element): string {
   const doc = root.ownerDocument;
   for (const br of root.querySelectorAll("br")) br.replaceWith(doc.createTextNode("\n"));
-  for (const el of root.querySelectorAll(BLOCK_ELEMENTS)) el.append(doc.createTextNode("\n\n"));
+  for (const el of root.querySelectorAll(BLOCK_ELEMENTS)) {
+    el.before(doc.createTextNode("\n\n"));
+    el.after(doc.createTextNode("\n\n"));
+  }
   return normalizeText(root.textContent ?? "");
 }
 
