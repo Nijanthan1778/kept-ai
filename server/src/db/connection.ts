@@ -4,6 +4,13 @@ import Database from "better-sqlite3";
 
 export type Db = Database.Database;
 
+/** Runs `fn` atomically: every write inside commits together or not at all. */
+export type RunInTransaction = <T>(fn: () => T) => T;
+
+export function createTransactionRunner(db: Db): RunInTransaction {
+  return (fn) => db.transaction(fn)();
+}
+
 export function openDatabase(dbPath: string): Db {
   if (dbPath !== ":memory:") {
     mkdirSync(path.dirname(dbPath), { recursive: true });

@@ -67,6 +67,10 @@ export function createItemsRepo(db: Db) {
     WHERE id = @id
   `);
 
+  const markReadyStmt = db.prepare(`
+    UPDATE items SET status = 'ready', error_message = NULL, updated_at = @now WHERE id = @id
+  `);
+
   const markFailedStmt = db.prepare(`
     UPDATE items SET status = 'failed', error_message = @errorMessage, updated_at = @now
     WHERE id = @id
@@ -108,6 +112,10 @@ export function createItemsRepo(db: Db) {
 
     saveExtractedContent(id: string, content: { title: string | null; rawContent: string }): void {
       saveContentStmt.run({ id, ...content, now: new Date().toISOString() });
+    },
+
+    markReady(id: string): void {
+      markReadyStmt.run({ id, now: new Date().toISOString() });
     },
 
     markFailed(id: string, errorMessage: string): void {

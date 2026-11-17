@@ -1,10 +1,14 @@
+import type { ChunksRepo } from "../db/chunksRepo.js";
+import type { RunInTransaction } from "../db/connection.js";
 import type { ItemsRepo } from "../db/itemsRepo.js";
 import type { ItemWithContent } from "../domain/item.js";
-import { IngestionError } from "../lib/errors.js";
+import { AppError, IngestionError } from "../lib/errors.js";
 import { createJobQueue } from "../lib/jobQueue.js";
 import type { Logger } from "../lib/logger.js";
 import { timed } from "../lib/timing.js";
 import type { IngestRequest } from "../schemas/ingest.js";
+import { chunkText, type TextChunk } from "./chunker.js";
+import type { EmbeddingService } from "./embeddings.js";
 import type { ExtractedContent } from "./extractor.js";
 
 const NOTE_TITLE_MAX_CHARS = 80;
@@ -25,21 +29,43 @@ export function deriveNoteTitle(content: string): string {
     : firstLine;
 }
 
-interface IngestionDeps {
-  itemsRepo: ItemsRepo;
-  logger: Logger;
-  fetchAndExtract: (url: string) => Promise<ExtractedContent>;
+/**
+ * The text that gets embedded for a chunk: the item title, then the chunk. A chunk from the
+ * middle of a page often never names its topic; the title supplies it. Only the chunk itself
+ * is stored and shown as a snippet.
+ */
+export function textForEmbedding(title: string | null, chunk: TextChunk): string {
+  return title ? `${title}\n\n${chunk.content}` : chunk.content;
 }
 
-export function createIngestionService({ itemsRepo, logger, fetchAndExtract }: IngestionDeps) {
+interface IngestionDeps {
+  itemsRepo: ItemsRepo;
+  chunksRepo: ChunksRepo;
+  runInTransaction: RunInTransaction;
+  embeddings: EmbeddingService;
+  fetchAndExtract: (url: string) => Promise<ExtractedContent>;
+  logger: Logger;
+}
+
+export function createIngestionService({
+  itemsRepo,
+  chunksRepo,
+  runInTransaction,
+  embeddings,
+  fetchAndExtract,
+  logger,
+}: IngestionDeps) {
   const queue = createJobQueue(PROCESSING_CONCURRENCY, (err) =>
     logger.error({ err }, "Ingestion job crashed outside its own error handling"),
   );
 
-  /** Returns the item's text, fetching it first for URL items that don't have it yet. */
-  async function ensureContent(item: ItemWithContent, stageMs: Record<string, number>): Promise<string> {
+  /** Returns the item's title and text, fetching the page first for URL items that don't have it yet. */
+  async function ensureContent(
+    item: ItemWithContent,
+    stageMs: Record<string, number>,
+  ): Promise<{ title: string | null; text: string }> {
     if (item.rawContent !== null) {
-      return item.rawContent; // notes, or a URL already fetched before a restart
+      return { title: item.title, text: item.rawContent }; // notes, or a URL fetched before a restart
     }
     if (!item.url) {
       throw new Error(`Item ${item.id} has neither content nor a URL`);
@@ -50,7 +76,7 @@ export function createIngestionService({ itemsRepo, logger, fetchAndExtract }: I
     if (extracted.truncated) {
       logger.warn({ itemId: item.id, keptChars: extracted.text.length }, "Page text truncated to the size limit");
     }
-    return extracted.text;
+    return { title: extracted.title ?? item.title, text: extracted.text };
   }
 
   /** Runs the whole pipeline for one item. Never throws: every failure ends as status `failed`. */
@@ -65,11 +91,40 @@ export function createIngestionService({ itemsRepo, logger, fetchAndExtract }: I
         log.warn("Item disappeared before processing");
         return;
       }
-      const content = await ensureContent(item, stageMs);
-      log.info({ contentChars: content.length, stageMs }, "Content ready; chunking and embedding not built yet");
+      const { title, text } = await ensureContent(item, stageMs);
+
+      const { value: chunks, ms: chunkMs } = await timed(() => chunkText(text));
+      stageMs.chunkMs = chunkMs;
+      if (chunks.length === 0) {
+        throw new IngestionError("This item has no text to index");
+      }
+
+      const { value: vectors, ms: embedMs } = await timed(() =>
+        embeddings.embedTexts(chunks.map((chunk) => textForEmbedding(title, chunk))),
+      );
+      stageMs.embedMs = embedMs;
+
+      // Chunks and the `ready` status commit together: an item is never `ready` with missing chunks.
+      const { ms: storeMs } = await timed(() =>
+        runInTransaction(() => {
+          chunksRepo.replaceForItem(
+            itemId,
+            chunks.map((chunk, i) => ({ ...chunk, embedding: vectors[i]! })),
+          );
+          itemsRepo.markReady(itemId);
+        }),
+      );
+      stageMs.storeMs = storeMs;
+
+      log.info(
+        { chunkCount: chunks.length, contentChars: text.length, stageMs, totalMs: Math.round(performance.now() - started) },
+        "Item ready",
+      );
     } catch (err) {
-      // Users see only messages we wrote; the full error (with cause chain) goes to the log.
-      const userMessage = err instanceof IngestionError ? err.message : UNEXPECTED_FAILURE_MESSAGE;
+      // Users see only messages we wrote (IngestionError, or AppError such as UpstreamError);
+      // the full error with its cause chain goes to the log.
+      const userMessage =
+        err instanceof IngestionError || err instanceof AppError ? err.message : UNEXPECTED_FAILURE_MESSAGE;
       log.error({ err, stageMs, totalMs: Math.round(performance.now() - started) }, "Ingestion failed");
       itemsRepo.markFailed(itemId, userMessage);
     }
