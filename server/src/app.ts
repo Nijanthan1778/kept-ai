@@ -2,7 +2,9 @@ import express from "express";
 import { errorHandler, notFoundHandler } from "./lib/errorHandler.js";
 import { requestLogger } from "./lib/requestLogger.js";
 import { healthRouter } from "./routes/health.js";
+import type { ItemsRepo } from "./db/itemsRepo.js";
 import { createIngestRouter } from "./routes/ingest.js";
+import { createItemsRouter } from "./routes/items.js";
 import type { IngestionService } from "./services/ingestion.js";
 
 // Notes are capped at 20k chars, so 100kb is generous while still bounding request size.
@@ -11,9 +13,10 @@ const JSON_BODY_LIMIT = "100kb";
 /** Everything the HTTP layer needs, passed in so tests can supply their own. */
 export interface AppDeps {
   ingestion: IngestionService;
+  itemsRepo: ItemsRepo;
 }
 
-export function createApp({ ingestion }: AppDeps) {
+export function createApp({ ingestion, itemsRepo }: AppDeps) {
   const app = express();
   app.disable("x-powered-by");
 
@@ -22,6 +25,7 @@ export function createApp({ ingestion }: AppDeps) {
 
   app.use(healthRouter);
   app.use(createIngestRouter(ingestion));
+  app.use(createItemsRouter(itemsRepo));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

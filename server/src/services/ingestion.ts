@@ -7,7 +7,12 @@ const NOTE_TITLE_MAX_CHARS = 80;
 
 /** A note's title is its first non-empty line, shortened, so sources are recognisable in answers. */
 export function deriveNoteTitle(content: string): string {
-  const firstLine = content.split("\n").find((line) => line.trim().length > 0)?.trim() ?? "";
+  const firstLine =
+    content
+      .split("\n")
+      .find((line) => line.trim().length > 0)
+      ?.replace(/\s+/g, " ")
+      .trim() ?? "";
   return firstLine.length > NOTE_TITLE_MAX_CHARS
     ? `${firstLine.slice(0, NOTE_TITLE_MAX_CHARS - 1).trimEnd()}…`
     : firstLine;

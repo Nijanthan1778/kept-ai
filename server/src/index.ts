@@ -14,7 +14,7 @@ logger.info({ dbPath: config.dbPath }, "Database ready");
 const itemsRepo = createItemsRepo(db);
 const ingestion = createIngestionService({ itemsRepo, logger });
 
-const server = createApp({ ingestion }).listen(config.port, () => {
+const server = createApp({ ingestion, itemsRepo }).listen(config.port, () => {
   logger.info({ port: config.port }, "Server listening");
 });
 
