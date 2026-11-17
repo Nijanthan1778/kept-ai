@@ -6,9 +6,12 @@ import { createTransactionRunner, openDatabase } from "./db/connection.js";
 import { createItemsRepo } from "./db/itemsRepo.js";
 import { applySchema } from "./db/schema.js";
 import { logger } from "./lib/logger.js";
+import { createAnswerService } from "./services/answer.js";
 import { createEmbeddingService } from "./services/embeddings.js";
 import { fetchAndExtract } from "./services/extractor.js";
 import { createIngestionService } from "./services/ingestion.js";
+import { createQueryService } from "./services/query.js";
+import { createRetrievalService } from "./services/retrieval.js";
 
 const db = openDatabase(config.dbPath);
 applySchema(db);
@@ -27,13 +30,18 @@ const ingestion = createIngestionService({
   fetchAndExtract,
   logger,
 });
+const queries = createQueryService({
+  embeddings,
+  retrieval: createRetrievalService({ chunksRepo, options: config.retrieval }),
+  answers: createAnswerService({ client: aiClient, model: config.ai.chatModel }),
+});
 
 const resumedCount = ingestion.resumePendingItems();
 if (resumedCount > 0) {
   logger.info({ count: resumedCount }, "Re-queued items left pending by a previous run");
 }
 
-const server = createApp({ ingestion, itemsRepo }).listen(config.port, () => {
+const server = createApp({ ingestion, itemsRepo, queries }).listen(config.port, () => {
   logger.info({ port: config.port }, "Server listening");
 });
 

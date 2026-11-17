@@ -1,25 +1,12 @@
 import { z } from "zod";
+import { NOT_AN_OBJECT_MESSAGE, isPlainObject, nonEmptyText, requiredString } from "./common.js";
 
 export const NOTE_MAX_CHARS = 20_000;
 export const URL_MAX_CHARS = 2_048;
 
-function isPlainObject(value: unknown): boolean {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/** "is required" when the field is missing, "must be a string" when it has the wrong type. */
-function requiredString(field: string) {
-  return z.string({
-    error: (issue) => (issue.input === undefined ? `${field} is required` : `${field} must be a string`),
-  });
-}
-
 const noteRequestSchema = z.object({
   type: z.literal("note"),
-  content: requiredString("content")
-    .trim()
-    .min(1, "content cannot be empty")
-    .max(NOTE_MAX_CHARS, `content must be at most ${NOTE_MAX_CHARS.toLocaleString("en-US")} characters`),
+  content: nonEmptyText("content", NOTE_MAX_CHARS),
 });
 
 const urlRequestSchema = z.object({
@@ -31,8 +18,7 @@ const urlRequestSchema = z.object({
 });
 
 export const ingestRequestSchema = z.discriminatedUnion("type", [noteRequestSchema, urlRequestSchema], {
-  error: (issue) =>
-    isPlainObject(issue.input) ? 'type must be "note" or "url"' : "Request body must be a JSON object",
+  error: (issue) => (isPlainObject(issue.input) ? 'type must be "note" or "url"' : NOT_AN_OBJECT_MESSAGE),
 });
 
 export type IngestRequest = z.infer<typeof ingestRequestSchema>;

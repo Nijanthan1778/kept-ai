@@ -16,7 +16,8 @@ const envSchema = z.object({
   AI_API_KEY: z.string({ error: MISSING_KEY_MESSAGE }).trim().min(1, MISSING_KEY_MESSAGE),
   AI_BASE_URL: z.url().default("https://generativelanguage.googleapis.com/v1beta/openai/"),
   EMBEDDING_MODEL: z.string().min(1).default("gemini-embedding-001"),
-  CHAT_MODEL: z.string().min(1).default("gemini-2.5-flash"),
+  // gemini-2.5-flash is deprecated (shutdown 2026-12-01); this is Google's listed replacement.
+  CHAT_MODEL: z.string().min(1).default("gemini-3.5-flash-lite"),
   PORT: z.coerce.number().int().positive().default(4000),
   TOP_K: z.coerce.number().int().min(1).max(20).default(5),
   MIN_SIMILARITY: z.coerce.number().min(-1).max(1).default(0.3),
