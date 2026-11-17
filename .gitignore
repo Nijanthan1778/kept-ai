@@ -1,0 +1,28 @@
+# Dependencies and build output
+node_modules
+dist
+dist-ssr
+*.tsbuildinfo
+
+# Secrets: only .env.example is committed
+.env
+.env.*
+!.env.example
+*.local
+
+# SQLite data (including WAL/SHM side files)
+server/data/
+*.db
+*.db-shm
+*.db-wal
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store

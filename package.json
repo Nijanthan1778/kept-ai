@@ -1,0 +1,19 @@
+{
+  "name": "kept-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Kept AI: an AI Knowledge Inbox built for the Turium AI Full Stack Developer assessment",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c blue,green \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w server && npm run build -w client",
+    "test": "npm test -w server",
+    "typecheck": "npm run typecheck -w server && npx -w client tsc -b"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.7"
+  }
+}
