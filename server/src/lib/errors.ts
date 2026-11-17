@@ -34,6 +34,17 @@ export class UpstreamError extends AppError {
   }
 }
 
+/**
+ * A background-processing failure whose message is safe to show the user
+ * (stored as the item's error_message). The underlying cause is logged, never shown.
+ */
+export class IngestionError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "IngestionError";
+  }
+}
+
 export interface ErrorBody {
   error: { code: string; message: string; details?: unknown };
 }
