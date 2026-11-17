@@ -4,6 +4,7 @@ import { openDatabase } from "./db/connection.js";
 import { createItemsRepo } from "./db/itemsRepo.js";
 import { applySchema } from "./db/schema.js";
 import { logger } from "./lib/logger.js";
+import { fetchAndExtract } from "./services/extractor.js";
 import { createIngestionService } from "./services/ingestion.js";
 
 const db = openDatabase(config.dbPath);
@@ -12,7 +13,12 @@ logger.info({ dbPath: config.dbPath }, "Database ready");
 
 // Composition root: build each dependency once and pass it down.
 const itemsRepo = createItemsRepo(db);
-const ingestion = createIngestionService({ itemsRepo, logger });
+const ingestion = createIngestionService({ itemsRepo, logger, fetchAndExtract });
+
+const resumedCount = ingestion.resumePendingItems();
+if (resumedCount > 0) {
+  logger.info({ count: resumedCount }, "Re-queued items left pending by a previous run");
+}
 
 const server = createApp({ ingestion, itemsRepo }).listen(config.port, () => {
   logger.info({ port: config.port }, "Server listening");

@@ -17,6 +17,10 @@ interface ItemRowWithContentHead extends ItemRow {
   content_head: string | null;
 }
 
+interface ItemRowWithContent extends ItemRow {
+  raw_content: string | null;
+}
+
 export interface NewItem {
   sourceType: SourceType;
   url: string | null;
@@ -51,6 +55,23 @@ export function createItemsRepo(db: Db) {
     ORDER BY created_at DESC, rowid DESC
   `);
 
+  const findWithContentStmt = db.prepare<[string], ItemRowWithContent>(`SELECT * FROM items WHERE id = ?`);
+
+  const idsByStatusStmt = db
+    .prepare<[ItemStatus], string>(`SELECT id FROM items WHERE status = ? ORDER BY created_at`)
+    .pluck();
+
+  // COALESCE keeps an existing title when the page had none (e.g. plain-text files).
+  const saveContentStmt = db.prepare(`
+    UPDATE items SET title = COALESCE(@title, title), raw_content = @rawContent, updated_at = @now
+    WHERE id = @id
+  `);
+
+  const markFailedStmt = db.prepare(`
+    UPDATE items SET status = 'failed', error_message = @errorMessage, updated_at = @now
+    WHERE id = @id
+  `);
+
   return {
     /** Inserts a new item in the `pending` state. */
     insert(newItem: NewItem): ItemWithContent {
@@ -73,6 +94,24 @@ export function createItemsRepo(db: Db) {
         ...toItem(row),
         contentHead: row.content_head,
       }));
+    },
+
+    findWithContent(id: string): ItemWithContent | undefined {
+      const row = findWithContentStmt.get(id);
+      return row && { ...toItem(row), rawContent: row.raw_content };
+    },
+
+    /** Oldest first, so recovered items are processed in the order they were saved. */
+    listIdsByStatus(status: ItemStatus): string[] {
+      return idsByStatusStmt.all(status);
+    },
+
+    saveExtractedContent(id: string, content: { title: string | null; rawContent: string }): void {
+      saveContentStmt.run({ id, ...content, now: new Date().toISOString() });
+    },
+
+    markFailed(id: string, errorMessage: string): void {
+      markFailedStmt.run({ id, errorMessage, now: new Date().toISOString() });
     },
   };
 }
