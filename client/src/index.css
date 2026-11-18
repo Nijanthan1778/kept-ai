@@ -33,6 +33,7 @@
     --color-secondary: var(--secondary);
     --color-primary-foreground: var(--primary-foreground);
     --color-primary: var(--primary);
+    --color-primary-hover: var(--primary-hover);
     --color-popover-foreground: var(--popover-foreground);
     --color-popover: var(--popover);
     --color-card-foreground: var(--card-foreground);
@@ -49,27 +50,27 @@
 }
 
 :root {
-    /* Kept AI theme: indigo primary on a cool light-grey page with white cards. */
-    --background: oklch(0.975 0.005 264);
-    /* Dark slate rather than near-black: softer on the eye, still high contrast. */
-    --foreground: oklch(0.27 0.025 265);
+    /* Kept AI theme: orange primary on a warm off-white page with white cards. */
+    --background: #f8f6f4;
+    /* Warm dark grey rather than near-black: softer on the eye, still high contrast. */
+    --foreground: #292524;
     --card: oklch(1 0 0);
-    --card-foreground: oklch(0.27 0.025 265);
+    --card-foreground: #292524;
     --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.27 0.025 265);
-    /* Lighter than indigo-600, but still ≥ 4.5:1 contrast for white text on buttons and pills. */
-    --primary: oklch(0.555 0.245 277);
+    --popover-foreground: #292524;
+    --primary: #ea580c;          /* buttons, logo, send button */
+    --primary-hover: #c2410c;    /* hover state of primary buttons */
     --primary-foreground: oklch(1 0 0);
     --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.27 0.025 265);
-    --muted: oklch(0.97 0 0);
+    --secondary-foreground: #292524;
+    --muted: #f5f3f1;
     --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.27 0.025 265);
+    --accent: #fff1e8;           /* soft orange backgrounds */
+    --accent-foreground: #c2410c; /* small orange text on soft backgrounds */
     --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.585 0.233 277.117);
+    --border: #e7e5e4;
+    --input: #e7e5e4;
+    --ring: #ea580c;
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);

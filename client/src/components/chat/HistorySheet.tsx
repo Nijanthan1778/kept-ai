@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { formatRelativeTime } from '@/lib/format'
+import { DRAWER_WIDTH } from '@/lib/drawer'
 import { cn } from '@/lib/utils'
 
 interface HistoryRowProps {
@@ -24,7 +25,7 @@ function HistoryRow({ conversation, isActive, onOpen, onDelete }: HistoryRowProp
       <div
         className={cn(
           'group flex items-center gap-1 rounded-lg pr-1 transition-colors hover:bg-muted',
-          isActive && 'bg-indigo-50 hover:bg-indigo-50',
+          isActive && 'bg-accent hover:bg-accent',
         )}
       >
         <button
@@ -38,7 +39,7 @@ function HistoryRow({ conversation, isActive, onOpen, onDelete }: HistoryRowProp
             aria-hidden
           />
           <span className="flex min-w-0 flex-col">
-            <span className={cn('truncate text-sm font-medium', isActive && 'text-primary')}>{conversation.title}</span>
+            <span className={cn('truncate text-sm font-medium', isActive && 'text-accent-foreground')}>{conversation.title}</span>
             <span className="text-xs text-muted-foreground">
               {questions} · {formatRelativeTime(conversation.updatedAt)}
             </span>
@@ -86,11 +87,11 @@ export function HistorySheet({
 }: HistorySheetProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full gap-0 sm:max-w-sm">
+      <SheetContent side="right" className={cn('gap-0', DRAWER_WIDTH)}>
         <SheetHeader className="border-b">
           <div className="flex items-center gap-2 pr-8">
             <SheetTitle className="text-lg">History</SheetTitle>
-            <Pill tone="indigo">{conversations.length}</Pill>
+            <Pill tone="brand">{conversations.length}</Pill>
           </div>
           <SheetDescription>Your past conversations. Pick one to continue it.</SheetDescription>
         </SheetHeader>

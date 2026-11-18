@@ -16,7 +16,7 @@ interface ChatWelcomeProps {
 export function ChatWelcome({ suggestions, itemCount, onAsk, onAddContent }: ChatWelcomeProps) {
   return (
     <div className="flex flex-col items-center gap-5 py-16 text-center">
-      <div className="flex size-14 items-center justify-center rounded-2xl bg-indigo-50 text-primary">
+      <div className="flex size-14 items-center justify-center rounded-2xl bg-accent text-primary ring-1 ring-primary/15">
         <LayersIcon className="size-7" aria-hidden />
       </div>
       <div className="flex flex-col gap-1.5">

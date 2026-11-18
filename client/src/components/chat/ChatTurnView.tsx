@@ -7,7 +7,7 @@ import type { ChatTurn } from '@/hooks/useConversations'
 
 function AssistantAvatar() {
   return (
-    <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-primary" aria-hidden>
+    <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent text-primary" aria-hidden>
       <LayersIcon className="size-4" />
     </div>
   )
@@ -23,7 +23,7 @@ export const ChatTurnView = forwardRef<HTMLDivElement, ChatTurnViewProps>(functi
   return (
     <div ref={ref} className="flex scroll-mt-4 flex-col gap-4">
       <div className="flex justify-end">
-        <p className="max-w-[85%] rounded-2xl rounded-br-md bg-indigo-100 px-4 py-2 text-sm whitespace-pre-wrap text-indigo-950">
+        <p className="max-w-[85%] rounded-2xl rounded-br-md bg-accent px-4 py-2 text-sm whitespace-pre-wrap text-foreground">
           {turn.question}
         </p>
       </div>

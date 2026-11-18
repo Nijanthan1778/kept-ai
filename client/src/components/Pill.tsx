@@ -1,14 +1,15 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
-export type PillTone = 'green' | 'amber' | 'red' | 'indigo' | 'sky' | 'gray'
+/** `brand` follows the theme accent, so it changes with the theme; the others are status colours. */
+export type PillTone = 'green' | 'amber' | 'red' | 'brand' | 'teal' | 'gray'
 
 const TONES: Record<PillTone, string> = {
   green: 'bg-emerald-50 text-emerald-700',
   amber: 'bg-amber-50 text-amber-700',
   red: 'bg-red-50 text-red-700',
-  indigo: 'bg-indigo-50 text-indigo-700',
-  sky: 'bg-sky-50 text-sky-700',
+  brand: 'bg-accent text-accent-foreground',
+  teal: 'bg-teal-50 text-teal-700',
   gray: 'bg-muted text-muted-foreground',
 }
 
@@ -16,8 +17,8 @@ const DOTS: Record<PillTone, string> = {
   green: 'bg-emerald-500',
   amber: 'bg-amber-500',
   red: 'bg-red-500',
-  indigo: 'bg-indigo-500',
-  sky: 'bg-sky-500',
+  brand: 'bg-primary',
+  teal: 'bg-teal-500',
   gray: 'bg-muted-foreground',
 }
 

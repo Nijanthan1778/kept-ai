@@ -32,11 +32,13 @@ export function SourceCard({ turnId, source, highlighted }: SourceCardProps) {
       className={cn(
         'flex scroll-mt-4 flex-col gap-2 rounded-xl border bg-card p-4 transition-colors',
         !source.cited && 'border-dashed bg-transparent',
-        highlighted && 'border-primary bg-indigo-50/60',
+        highlighted && 'border-primary bg-accent/60',
       )}
     >
-      <header className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2.5">
+      {/* flex-wrap: on narrow screens the score badge drops to its own line instead of
+          squeezing the source title down to a few pixels. */}
+      <header className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
+        <div className="flex min-w-[13rem] flex-1 items-center gap-2.5">
           <span
             className={cn(
               'flex size-6 shrink-0 items-center justify-center rounded-md text-xs font-semibold',
@@ -46,7 +48,7 @@ export function SourceCard({ turnId, source, highlighted }: SourceCardProps) {
             {source.index}
           </span>
           <span className="truncate font-semibold">{sourceTitle(source)}</span>
-          <Pill tone={source.sourceType === 'url' ? 'sky' : 'indigo'}>{source.sourceType === 'url' ? 'URL' : 'Note'}</Pill>
+          <Pill tone={source.sourceType === 'url' ? 'teal' : 'brand'}>{source.sourceType === 'url' ? 'URL' : 'Note'}</Pill>
         </div>
         {source.cited ? (
           <Pill tone="green" className="text-sm">
@@ -54,7 +56,8 @@ export function SourceCard({ turnId, source, highlighted }: SourceCardProps) {
           </Pill>
         ) : (
           <Pill tone="gray" className="text-sm">
-            Retrieved, not cited · {score}
+            <span className="hidden sm:inline">Retrieved, not cited</span>
+            <span className="sm:hidden">Not cited</span> · {score}
           </Pill>
         )}
       </header>

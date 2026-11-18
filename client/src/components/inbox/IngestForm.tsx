@@ -26,7 +26,7 @@ interface BareUrlHintProps {
 /** Shown when the note is only a link: offers to save it as a URL so the page gets fetched. */
 function BareUrlHint({ onSaveAsUrl, disabled }: BareUrlHintProps) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-900" role="status">
+    <div className="flex items-center justify-between gap-3 rounded-lg bg-accent px-3 py-2 text-sm text-accent-foreground" role="status">
       <p className="flex items-center gap-2">
         <InfoIcon className="size-4 shrink-0 text-primary" aria-hidden />
         This looks like a link. Save it as a URL so the page is fetched and searchable?
@@ -39,7 +39,12 @@ function BareUrlHint({ onSaveAsUrl, disabled }: BareUrlHintProps) {
   )
 }
 
-export function IngestForm({ onIngested }: { onIngested: (item: Item) => void }) {
+interface IngestFormProps {
+  onIngested: (item: Item) => void
+  onCancel: () => void
+}
+
+export function IngestForm({ onIngested, onCancel }: IngestFormProps) {
   const [mode, setMode] = useState<Mode>('note')
   const [note, setNote] = useState('')
   const [url, setUrl] = useState('')
@@ -85,8 +90,8 @@ export function IngestForm({ onIngested }: { onIngested: (item: Item) => void })
       </TabsList>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        <TabsContent value="note">
-          <label htmlFor="note-input" className="sr-only">
+        <TabsContent value="note" className="flex flex-col gap-2">
+          <label htmlFor="note-input" className="text-sm font-medium">
             Note
           </label>
           <Textarea
@@ -97,8 +102,8 @@ export function IngestForm({ onIngested }: { onIngested: (item: Item) => void })
             onChange={(e) => setNote(e.target.value)}
           />
         </TabsContent>
-        <TabsContent value="url">
-          <label htmlFor="url-input" className="sr-only">
+        <TabsContent value="url" className="flex flex-col gap-2">
+          <label htmlFor="url-input" className="text-sm font-medium">
             URL
           </label>
           <Input
@@ -109,7 +114,7 @@ export function IngestForm({ onIngested }: { onIngested: (item: Item) => void })
             value={url}
             onChange={(e) => setUrl(e.target.value)}
           />
-          <p className="mt-2 text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             The page is fetched on the server and its readable text is saved. Pages that need JavaScript or a login
             can't be read.
           </p>
@@ -127,10 +132,15 @@ export function IngestForm({ onIngested }: { onIngested: (item: Item) => void })
           <p className={cn('text-sm', tooLong ? 'text-destructive' : 'text-muted-foreground')}>
             {mode === 'note' && `${note.length.toLocaleString()} / ${NOTE_MAX_CHARS.toLocaleString()}`}
           </p>
-          <Button type="submit" size="lg" disabled={!canSubmit} className="h-10 px-5">
-            {isPending && <Loader2Icon className="animate-spin" aria-hidden />}
-            {mode === 'note' ? 'Save note' : 'Save URL'}
-          </Button>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" size="lg" onClick={onCancel} className="h-10 px-5">
+              Cancel
+            </Button>
+            <Button type="submit" size="lg" disabled={!canSubmit} className="h-10 px-5">
+              {isPending && <Loader2Icon className="animate-spin" aria-hidden />}
+              {mode === 'note' ? 'Save note' : 'Save URL'}
+            </Button>
+          </div>
         </div>
       </form>
     </Tabs>

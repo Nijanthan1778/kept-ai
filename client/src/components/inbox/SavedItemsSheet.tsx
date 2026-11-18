@@ -4,6 +4,8 @@ import { ItemList } from '@/components/inbox/ItemList'
 import { Pill } from '@/components/Pill'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { DRAWER_WIDTH } from '@/lib/drawer'
+import { cn } from '@/lib/utils'
 
 interface SavedItemsSheetProps {
   open: boolean
@@ -19,11 +21,11 @@ interface SavedItemsSheetProps {
 export function SavedItemsSheet({ open, onOpenChange, items, isLoading, error, onRemove, onAddContent }: SavedItemsSheetProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full gap-0 sm:max-w-md">
+      <SheetContent side="right" className={cn('gap-0', DRAWER_WIDTH)}>
         <SheetHeader className="border-b">
           <div className="flex items-center gap-2 pr-8">
             <SheetTitle className="text-lg">Saved items</SheetTitle>
-            <Pill tone="indigo">{items.length === 1 ? '1 item' : `${items.length} items`}</Pill>
+            <Pill tone="brand">{items.length === 1 ? '1 item' : `${items.length} items`}</Pill>
           </div>
           <SheetDescription>New items are searchable once they show Ready.</SheetDescription>
         </SheetHeader>

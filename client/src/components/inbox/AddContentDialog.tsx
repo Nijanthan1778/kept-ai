@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { PlusIcon } from 'lucide-react'
 import type { Item } from '@/api/types'
 import { IngestForm } from '@/components/inbox/IngestForm'
 import { SaveProgress } from '@/components/inbox/SaveProgress'
@@ -33,15 +34,21 @@ function AddContentFlow({ items, onIngested, onClose }: AddContentFlowProps) {
 
   return (
     <>
-      <DialogHeader>
-        <DialogTitle className="text-lg">Add to your inbox</DialogTitle>
-        <DialogDescription>Save a note, or a URL to fetch and read.</DialogDescription>
+      <DialogHeader className="flex-row items-center gap-3 text-left">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-primary" aria-hidden>
+          <PlusIcon className="size-5" />
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <DialogTitle className="text-lg">Add to your inbox</DialogTitle>
+          <DialogDescription>Save a note, or a URL to fetch and read.</DialogDescription>
+        </div>
       </DialogHeader>
       <IngestForm
         onIngested={(item) => {
           onIngested(item)
           setSaved(item)
         }}
+        onCancel={onClose}
       />
     </>
   )

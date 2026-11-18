@@ -6,28 +6,39 @@ import { SourceCard } from '@/components/chat/SourceCard'
 import { sourceElementId } from '@/lib/sourceAnchor'
 import { cn } from '@/lib/utils'
 
-// Same citation format the server parses: [1], [1][2] or [1, 2].
-const CITATION_PATTERN = /\[(\d+(?:\s*,\s*\d+)*)\]/g
+// Same citation format the server parses ([1], [1][2] or [1, 2]), matched as a whole run of
+// adjacent markers so "[1][2]" can be shown as one footnote: [1, 2].
+const CITATION_RUN_PATTERN = /\[\d+(?:\s*,\s*\d+)*\](?:\s*\[\d+(?:\s*,\s*\d+)*\])*/g
 
 interface CitationHandlers {
   onHighlight: (number: number | null) => void
   onOpen: (number: number) => void
 }
 
-function CitationPill({ number, onHighlight, onOpen }: { number: number } & CitationHandlers) {
+/** A quiet, footnote-style citation: small raised "[1, 2]" where each number opens its source. */
+function Citation({ numbers, onHighlight, onOpen }: { numbers: number[] } & CitationHandlers) {
   return (
-    <button
-      type="button"
-      aria-label={`Show source ${number}`}
-      className="ml-1 inline-flex h-5 min-w-6 items-center justify-center rounded-md bg-primary px-2 align-[0.1em] text-xs font-semibold text-primary-foreground hover:bg-primary/85"
-      onMouseEnter={() => onHighlight(number)}
-      onMouseLeave={() => onHighlight(null)}
-      onFocus={() => onHighlight(number)}
-      onBlur={() => onHighlight(null)}
-      onClick={() => onOpen(number)}
-    >
-      {number}
-    </button>
+    <sup className="ml-0.5 text-[0.7rem] font-medium text-muted-foreground">
+      [
+      {numbers.map((n, i) => (
+        <span key={n}>
+          {i > 0 && ', '}
+          <button
+            type="button"
+            aria-label={`Show source ${n}`}
+            className="rounded-sm px-px text-accent-foreground hover:underline focus-visible:underline"
+            onMouseEnter={() => onHighlight(n)}
+            onMouseLeave={() => onHighlight(null)}
+            onFocus={() => onHighlight(n)}
+            onBlur={() => onHighlight(null)}
+            onClick={() => onOpen(n)}
+          >
+            {n}
+          </button>
+        </span>
+      ))}
+      ]
+    </sup>
   )
 }
 
@@ -37,24 +48,28 @@ function splitLastWord(text: string): [string, string] {
   return match ? [text.slice(0, match.index), match[1]!] : [text, '']
 }
 
+/** Every source number in a run of markers, deduplicated, keeping only numbers that exist. */
+function citedNumbers(run: string, sourceCount: number): number[] {
+  const numbers = (run.match(/\d+/g) ?? []).map(Number).filter((n) => n >= 1 && n <= sourceCount)
+  return [...new Set(numbers)]
+}
+
 /**
- * Turns "[n]" markers that match a real source into pills; anything else stays plain text.
- * Each pill is kept on the same line as the word before it, so it never wraps onto a line alone.
+ * Turns runs of "[n]" markers into one footnote each; numbers that match no source (made up by
+ * the model) are dropped. Each footnote stays on the same line as the word before it.
  */
 function renderWithCitations(text: string, sourceCount: number, handlers: CitationHandlers): ReactNode[] {
   const parts: ReactNode[] = []
   let lastIndex = 0
-  for (const match of text.matchAll(CITATION_PATTERN)) {
-    const numbers = match[1]!.split(',').map((n) => Number(n.trim()))
-    if (!numbers.every((n) => n >= 1 && n <= sourceCount)) continue
+  for (const match of text.matchAll(CITATION_RUN_PATTERN)) {
+    const numbers = citedNumbers(match[0], sourceCount)
+    if (numbers.length === 0) continue
     const [before, lastWord] = splitLastWord(text.slice(lastIndex, match.index))
     parts.push(before)
     parts.push(
       <span key={match.index} className="whitespace-nowrap">
         {lastWord}
-        {numbers.map((n) => (
-          <CitationPill key={n} number={n} {...handlers} />
-        ))}
+        <Citation numbers={numbers} {...handlers} />
       </span>,
     )
     lastIndex = match.index + match[0].length

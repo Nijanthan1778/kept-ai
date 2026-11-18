@@ -29,7 +29,7 @@ export function ItemRow({ item, onRemove }: ItemRowProps) {
         </div>
 
         {item.url && (
-          <a href={item.url} target="_blank" rel="noreferrer" className="truncate text-sm text-primary hover:underline">
+          <a href={item.url} target="_blank" rel="noreferrer" className="truncate text-sm text-teal-700 hover:underline">
             {displayUrl(item.url)}
           </a>
         )}
