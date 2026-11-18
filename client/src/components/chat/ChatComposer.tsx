@@ -49,7 +49,8 @@ export function ChatComposer({ onAsk, isAsking }: ChatComposerProps) {
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="max-h-40 min-h-10 resize-none border-0 bg-transparent px-2 py-2 text-base shadow-none focus-visible:ring-0 md:text-base dark:bg-transparent"
+          // 14px like the rest of the chat; 16px below md, because iOS Safari zooms into smaller inputs on focus.
+          className="max-h-40 min-h-10 resize-none border-0 bg-transparent px-2 py-2 text-base shadow-none focus-visible:ring-0 md:text-sm dark:bg-transparent"
         />
         <Button type="submit" size="icon-lg" disabled={!canSend} aria-label="Ask" className="shrink-0 rounded-xl">
           {isAsking ? <Loader2Icon className="animate-spin" aria-hidden /> : <ArrowUpIcon aria-hidden />}

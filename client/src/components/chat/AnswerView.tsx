@@ -89,7 +89,7 @@ export function AnswerView({ turnId, result }: AnswerViewProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-3 text-base leading-relaxed">
+      <div className="flex flex-col gap-3 text-sm leading-relaxed">
         {paragraphs.map((paragraph, i) => (
           <p key={i} className="whitespace-pre-line">
             {renderWithCitations(paragraph, result.sources.length, handlers)}
