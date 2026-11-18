@@ -77,7 +77,7 @@ cp server/.env.example server/.env   # then open server/.env and paste your key 
 npm run dev                          # API on http://localhost:4000, UI on http://localhost:5173
 ```
 
-Open **http://localhost:5173**. The SQLite database is created automatically at `server/data/kept.db` on first start; there's nothing else to install or migrate.
+Open **http://localhost:5173**. The SQLite database is created automatically at `server/data/kept.db` on first start; there's nothing else to install or migrate (see [Database](#database)).
 
 The server refuses to start if the configuration is invalid. For example, without a key it prints `AI_API_KEY: is required. Get a key from Google AI Studio and set it in server/.env` and exits. After editing `server/.env`, restart `npm run dev`.
 
@@ -91,6 +91,32 @@ The server refuses to start if the configuration is invalid. For example, withou
 | `TOP_K` | `5` | Maximum number of sources passed to the model |
 | `MIN_SIMILARITY` | `0.55` | Chunks scoring below this are never used (calibrated for `gemini-embedding-001`; see below) |
 | `LOG_LEVEL` | `info` | pino level |
+| `DB_PATH` | `server/data/kept.db` | Optional. Where the SQLite file lives (not in `.env.example`; set it only to move the database) |
+
+### Database
+
+There's **no database server to install or configure**. Kept AI uses SQLite through `better-sqlite3`, which is installed by `npm install` and keeps everything in one file.
+
+- **Created automatically:** on first start the server creates `server/data/` and the `kept.db` file, then creates the tables. Startup logs `"Database ready"` with the file path.
+- **Schema updates are automatic:** every start runs the schema setup again (`CREATE TABLE IF NOT EXISTS …`) and adds any column a newer version needs to an existing database, so pulling new code keeps your data. Defined in `server/src/db/schema.ts`.
+- **Not in Git:** `server/data/` and `*.db*` are in `.gitignore`, so every clone starts with an empty inbox.
+- **WAL mode:** you'll also see `kept.db-wal` and `kept.db-shm` next to it. They're part of SQLite's write-ahead log; leave them alone.
+
+| Table | Holds |
+|---|---|
+| `items` | One row per note or URL: `source_type`, `url`, `title`, `raw_content`, `status`, `processing_stage`, `error_message`, `created_at`, `updated_at` |
+| `chunks` | The searchable pieces of each item: `content`, `start_offset`, `end_offset`, and `embedding` (a `Float32Array` BLOB). Deleted with their item. |
+| `conversations` | One row per chat: `title` (its first question), `created_at`, `updated_at` |
+| `conversation_turns` | Each answered question: `question`, `answer`, `sources_json` (a snapshot of the cited passages). Deleted with their conversation. |
+
+**Looking at the data:** use the `sqlite3` command-line tool (preinstalled on macOS and most Linux), the *SQLite Viewer* extension in VS Code, or [DB Browser for SQLite](https://sqlitebrowser.org/). Opening it read-only is safe while the app runs:
+
+```bash
+sqlite3 -readonly -header -column server/data/kept.db \
+  "SELECT source_type, status, title, created_at FROM items ORDER BY created_at DESC;"
+```
+
+**Reset or back up:** stop the server, then delete `server/data/` to start with an empty inbox (it's recreated on the next start), or copy the folder to keep a backup.
 
 Other commands:
 
