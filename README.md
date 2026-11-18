@@ -44,7 +44,7 @@ The server refuses to start if the configuration is invalid, for example if `AI_
 | `CHAT_MODEL` | `gemini-3.5-flash-lite` | Answer generation (see the model note below) |
 | `PORT` | `4000` | API port |
 | `TOP_K` | `5` | Maximum number of sources passed to the model |
-| `MIN_SIMILARITY` | `0.3` | Chunks scoring below this are never used |
+| `MIN_SIMILARITY` | `0.55` | Chunks scoring below this are never used (calibrated for `gemini-embedding-001`; see below) |
 | `LOG_LEVEL` | `info` | pino level |
 
 Other commands:
@@ -170,7 +170,8 @@ Each item logs `fetchMs`, `chunkMs`, `embedMs`, `storeMs` and `totalMs`. On star
 
 ```
 POST /query → no ready content? → canned answer (no AI calls)
-            → embed question → cosine similarity vs every ready chunk → filter MIN_SIMILARITY → TOP_K
+            → embed question → cosine similarity vs every ready chunk
+            → keep ≥ MIN_SIMILARITY and within 0.10 of the best match → TOP_K, max 3 per item first
             → none left? → canned answer (no LLM call)
             → prompt with numbered sources → LLM → parse [n] citations → answer + sources
 ```
@@ -197,6 +198,28 @@ Embeddings are stored as `Float32Array` BLOBs, normalized to length 1 so that co
 - **Cost:** O(n·d) time and memory for every query, and all vectors are loaded into memory for each one. That's fine at this scale and is the first thing to replace as it grows.
 - **Same embedding model for documents and questions:** vectors from different models can't be compared. If `EMBEDDING_MODEL` changes, everything must be re-embedded. Retrieval detects chunks with a different vector size, skips them, and logs a warning instead of failing silently.
 
+### Retrieval rules, calibrated against real Gemini scores
+
+`gemini-embedding-001` gives fairly high cosine scores even for unrelated text, so the thresholds were set from measured scores rather than guessed. I saved a 4-sentence note, a Wikipedia article and a long essay (52 chunks), then asked related and unrelated questions:
+
+| Question | Best match |
+|---|---|
+| "When and where is the offsite?" | 0.713 |
+| "What is the budget per person?" | 0.603 |
+| "Who leads the strategy workshop?" (weakest relevant) | 0.575 |
+| "What problem does RAG solve?" | 0.745 |
+| "What is the capital of Australia?" (unrelated) | 0.484 |
+| "How do I bake sourdough bread?" (unrelated, the highest of these) | 0.519 |
+| "Who won the 2022 FIFA World Cup?" (unrelated) | 0.478 |
+
+Three rules come out of this:
+
+1. **`MIN_SIMILARITY = 0.55`** sits between the highest unrelated score (0.519) and the lowest relevant best match (0.575). Unrelated questions get "nothing relevant found" **without an LLM call**. The margin is narrow, which is why it's configurable, and it needs re-checking if the embedding model changes.
+2. **Relative window: chunks must also score within 0.10 of the question's best match.** With only an absolute threshold, merely topical chunks (0.55–0.57 from the essay) took slots even when much better matches (0.71+) existed. In the measurements, every source an answer needed was within 0.09 of the best match.
+3. **At most 3 chunks per item in the first pass.** For "Who leads the workshop and what is RAG?", all 5 slots went to Wikipedia chunks (0.62–0.65), and the note that answers the first half (0.563) was dropped, so the answer said nothing about the workshop. With the cap the note gets a slot and the answer names the leader. Slots left over are refilled from the same item, so a question about a single long document still gets 5 chunks.
+
+These are tuned on a small sample. In production I'd replace this with an evaluation set (see below).
+
 ### Async ingestion: in-process queue and polling
 
 Ingestion runs in the same Node process on a small in-memory queue (concurrency 2). The client polls `GET /items` every 2 s, and only while some item is `pending`.
@@ -211,6 +234,8 @@ Gemini's OpenAI-compatible endpoint means switching provider (OpenAI, a local mo
 ### Answer generation
 
 - The system prompt allows only the numbered sources, requires inline `[n]` citations, and tells the model to say plainly when the sources don't cover the question.
+- It allows reasoning over facts in the sources (calculations, comparisons, date differences) and asks the model to show its working. Without that, the model refused "What is the budget per person?" even though the note gives the total and the head count.
+- It asks for plain text with `- ` bullets, because the UI doesn't render Markdown.
 - Source text is labelled as data, so instructions inside a fetched page are ignored (a prompt-injection defence).
 - Wikipedia-style `[12]` footnote markers are stripped from web pages before prompting, so they can't be confused with source citations. Notes are sent unchanged, so code like `arr[0]` stays intact.
 - Citations are parsed from the answer (`[1]`, `[1][2]` and `[1, 2]` are all handled). Numbers that don't match a source are ignored, both for the `cited` flags and for the links in the UI.
@@ -239,14 +264,13 @@ User-supplied URLs are fetched by the server, so `lib/urlSafety.ts` checks that 
 
 ### Known limitations
 
-- **Only tested against stubs.** I built and tested this without a Gemini key. Every AI code path (batching, retries, error mapping, citations) was checked against local OpenAI-compatible stub servers, and the UI was checked in a real browser against them. Two things still need confirming with a real key:
-  - that the endpoint accepts a batch of 100 inputs per embeddings call;
-  - what `MIN_SIMILARITY` should be. Gemini embeddings are known to give fairly high cosine scores even for unrelated texts, so if unrelated questions still retrieve sources, raise it (probably to 0.5–0.6).
+- **Retrieval thresholds are tuned on a small sample** (see "Retrieval rules"). They work for the tested content, but there's no evaluation set behind them.
+- **Error paths tested against stubs.** The happy path was tested against the real Gemini API (batched embeddings, retrieval, cited answers). Rate-limit retries, 401/404 handling and empty responses were tested against local OpenAI-compatible stubs that return those errors, since they can't be triggered on demand.
 - **JavaScript-rendered pages.** Single-page apps and pages behind logins come back with almost no text and are marked `failed` with that explanation. There's no headless browser.
 - **Unsupported content.** PDFs and other non-HTML content are rejected.
 - **Single user, no auth.** This is by design for the assignment.
 - **DNS rebinding.** The SSRF check resolves DNS, then `fetch()` resolves it again. A hostile DNS server could answer differently the second time. The production fix is pinning the checked IP in the HTTP agent.
-- **Plain-text answers.** Answers are not rendered as Markdown; any Markdown the model writes is shown as-is.
+- **Plain-text answers.** Answers are not rendered as Markdown. The prompt asks for plain text, but if the model writes Markdown anyway it's shown as-is.
 
 ## Project structure
 

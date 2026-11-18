@@ -20,7 +20,9 @@ const envSchema = z.object({
   CHAT_MODEL: z.string().min(1).default("gemini-3.5-flash-lite"),
   PORT: z.coerce.number().int().positive().default(4000),
   TOP_K: z.coerce.number().int().min(1).max(20).default(5),
-  MIN_SIMILARITY: z.coerce.number().min(-1).max(1).default(0.3),
+  // Calibrated on gemini-embedding-001: unrelated questions topped out at 0.47–0.52, while the
+  // best match for answerable questions scored 0.575–0.745. Re-check if EMBEDDING_MODEL changes.
+  MIN_SIMILARITY: z.coerce.number().min(-1).max(1).default(0.55),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   DB_PATH: z.string().min(1).default(path.join(SERVER_ROOT, "data", "kept.db")),
 });
