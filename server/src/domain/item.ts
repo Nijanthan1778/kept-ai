@@ -1,6 +1,10 @@
 export type SourceType = "note" | "url";
 export type ItemStatus = "pending" | "ready" | "failed";
 
+/** What a `pending` item's background job is doing right now, in pipeline order. */
+export const PROCESSING_STAGES = ["fetching", "chunking", "embedding", "saving"] as const;
+export type ProcessingStage = (typeof PROCESSING_STAGES)[number];
+
 /** An item's metadata, without its (possibly large) raw content. */
 export interface Item {
   id: string;
@@ -8,6 +12,8 @@ export interface Item {
   url: string | null;
   title: string | null;
   status: ItemStatus;
+  /** Null when the item is queued but not started, or no longer pending. */
+  processingStage: ProcessingStage | null;
   errorMessage: string | null;
   createdAt: string;
   updatedAt: string;

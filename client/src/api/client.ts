@@ -1,4 +1,4 @@
-import type { ApiErrorBody, IngestInput, Item, QueryResult } from './types'
+import type { ApiErrorBody, Conversation, ConversationSummary, IngestInput, Item, QueryResponse } from './types'
 
 // In dev, Vite proxies /api to the server (see vite.config.ts).
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
@@ -36,7 +36,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(0, 'NETWORK_ERROR', 'Could not reach the server. Is it running?')
   }
 
-  const body: unknown = await response.json().catch(() => null)
+  // 204 No Content (e.g. after a delete) has no body to parse.
+  const body: unknown = response.status === 204 ? null : await response.json().catch(() => null)
   if (!response.ok) {
     const requestId = response.headers.get('x-request-id')
     if (isApiErrorBody(body)) {
@@ -59,8 +60,27 @@ export const api = {
     return item
   },
 
-  ask(question: string): Promise<QueryResult> {
-    return request<QueryResult>('/query', { method: 'POST', body: JSON.stringify({ question }) })
+  async removeItem(id: string): Promise<void> {
+    await request<null>(`/items/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  },
+
+  /** Without a conversationId the server starts a new conversation and returns its id. */
+  ask(question: string, conversationId?: string): Promise<QueryResponse> {
+    return request<QueryResponse>('/query', { method: 'POST', body: JSON.stringify({ question, conversationId }) })
+  },
+
+  async listConversations(): Promise<ConversationSummary[]> {
+    const { conversations } = await request<{ conversations: ConversationSummary[] }>('/conversations')
+    return conversations
+  },
+
+  async getConversation(id: string): Promise<Conversation> {
+    const { conversation } = await request<{ conversation: Conversation }>(`/conversations/${encodeURIComponent(id)}`)
+    return conversation
+  },
+
+  async deleteConversation(id: string): Promise<void> {
+    await request<null>(`/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' })
   },
 }
 

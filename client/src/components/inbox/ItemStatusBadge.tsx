@@ -1,29 +1,29 @@
-import { CircleAlertIcon, CircleCheckIcon, Loader2Icon } from 'lucide-react'
+import { CheckIcon, CircleAlertIcon, Loader2Icon } from 'lucide-react'
 import type { ItemStatus } from '@/api/types'
-import { Badge } from '@/components/ui/badge'
+import { Pill } from '@/components/Pill'
 
 export function ItemStatusBadge({ status }: { status: ItemStatus }) {
   switch (status) {
     case 'pending':
       return (
-        <Badge variant="secondary">
+        <Pill tone="amber">
           <Loader2Icon className="animate-spin" aria-hidden />
           Processing
-        </Badge>
+        </Pill>
       )
     case 'ready':
       return (
-        <Badge variant="outline">
-          <CircleCheckIcon className="text-green-600" aria-hidden />
+        <Pill tone="green">
+          <CheckIcon aria-hidden />
           Ready
-        </Badge>
+        </Pill>
       )
     case 'failed':
       return (
-        <Badge variant="destructive">
+        <Pill tone="red">
           <CircleAlertIcon aria-hidden />
           Failed
-        </Badge>
+        </Pill>
       )
   }
 }

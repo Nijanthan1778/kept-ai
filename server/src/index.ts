@@ -3,10 +3,12 @@ import { createApp } from "./app.js";
 import { config } from "./config.js";
 import { createChunksRepo } from "./db/chunksRepo.js";
 import { createTransactionRunner, openDatabase } from "./db/connection.js";
+import { createConversationsRepo } from "./db/conversationsRepo.js";
 import { createItemsRepo } from "./db/itemsRepo.js";
 import { applySchema } from "./db/schema.js";
 import { logger } from "./lib/logger.js";
 import { createAnswerService } from "./services/answer.js";
+import { createConversationService } from "./services/conversations.js";
 import { createEmbeddingService } from "./services/embeddings.js";
 import { fetchAndExtract } from "./services/extractor.js";
 import { createIngestionService } from "./services/ingestion.js";
@@ -20,12 +22,13 @@ logger.info({ dbPath: config.dbPath }, "Database ready");
 // Composition root: build each dependency once and pass it down.
 const itemsRepo = createItemsRepo(db);
 const chunksRepo = createChunksRepo(db);
+const runInTransaction = createTransactionRunner(db);
 const aiClient = createAiClient({ apiKey: config.ai.apiKey, baseUrl: config.ai.baseUrl });
 const embeddings = createEmbeddingService({ client: aiClient, model: config.ai.embeddingModel, logger });
 const ingestion = createIngestionService({
   itemsRepo,
   chunksRepo,
-  runInTransaction: createTransactionRunner(db),
+  runInTransaction,
   embeddings,
   fetchAndExtract,
   logger,
@@ -35,13 +38,17 @@ const queries = createQueryService({
   retrieval: createRetrievalService({ chunksRepo, options: config.retrieval }),
   answers: createAnswerService({ client: aiClient, model: config.ai.chatModel }),
 });
+const conversations = createConversationService({
+  conversationsRepo: createConversationsRepo(db),
+  runInTransaction,
+});
 
 const resumedCount = ingestion.resumePendingItems();
 if (resumedCount > 0) {
   logger.info({ count: resumedCount }, "Re-queued items left pending by a previous run");
 }
 
-const server = createApp({ ingestion, itemsRepo, queries }).listen(config.port, () => {
+const server = createApp({ ingestion, itemsRepo, queries, conversations }).listen(config.port, () => {
   logger.info({ port: config.port }, "Server listening");
 });
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, errorMessage } from '@/api/client'
+import { api, ApiError, errorMessage } from '@/api/client'
 import type { Item } from '@/api/types'
 
 const POLL_INTERVAL_MS = 2_000
@@ -47,5 +47,16 @@ export function useItems() {
     setItems((current) => [item, ...current.filter((existing) => existing.id !== item.id)])
   }, [])
 
-  return { items, isLoading, error, addItem }
+  /** Deletes an item on the server, then drops it from the list. Throws on failure. */
+  const removeItem = useCallback(async (id: string) => {
+    try {
+      await api.removeItem(id)
+    } catch (err) {
+      // Already gone on the server (e.g. removed in another tab): still drop it here.
+      if (!(err instanceof ApiError && err.status === 404)) throw err
+    }
+    setItems((current) => current.filter((item) => item.id !== id))
+  }, [])
+
+  return { items, isLoading, error, addItem, removeItem }
 }

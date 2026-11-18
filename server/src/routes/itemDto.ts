@@ -1,4 +1,4 @@
-import type { Item, ItemStatus, SourceType } from "../domain/item.js";
+import type { Item, ItemStatus, ProcessingStage, SourceType } from "../domain/item.js";
 
 export const PREVIEW_MAX_CHARS = 200;
 
@@ -9,6 +9,8 @@ export interface ItemDto {
   url: string | null;
   title: string | null;
   status: ItemStatus;
+  /** Only while `pending`: what the background job is doing (null = queued, not started). */
+  processingStage: ProcessingStage | null;
   errorMessage: string | null;
   createdAt: string;
   preview: string | null;
@@ -30,6 +32,7 @@ export function toItemDto(item: Item, content: string | null): ItemDto {
     url: item.url,
     title: item.title,
     status: item.status,
+    processingStage: item.processingStage,
     errorMessage: item.errorMessage,
     createdAt: item.createdAt,
     preview: makePreview(content),

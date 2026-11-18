@@ -68,6 +68,17 @@ describe("query request schema", () => {
     expect(issuesFor(queryRequestSchema, input)).toEqual([{ field, message }]);
   });
 
+  it("accepts an optional conversationId", () => {
+    const conversationId = "6f1c2b9e-3d4a-4f5b-8c7d-1e2f3a4b5c6d";
+    expect(parseOrThrow(queryRequestSchema, { question: "Q", conversationId })).toEqual({ question: "Q", conversationId });
+  });
+
+  it("rejects a conversationId that is not a UUID", () => {
+    expect(issuesFor(queryRequestSchema, { question: "Q", conversationId: "abc" })).toEqual([
+      { field: "conversationId", message: "conversationId must be a valid conversation ID (UUID)" },
+    ]);
+  });
+
   it("puts the problems in the error message too", () => {
     expect(() => parseOrThrow(queryRequestSchema, {})).toThrow("Invalid request: question is required");
   });

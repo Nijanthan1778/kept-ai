@@ -2,10 +2,12 @@ import express from "express";
 import type { ItemsRepo } from "./db/itemsRepo.js";
 import { errorHandler, notFoundHandler } from "./lib/errorHandler.js";
 import { requestLogger } from "./lib/requestLogger.js";
+import { createConversationsRouter } from "./routes/conversations.js";
 import { healthRouter } from "./routes/health.js";
 import { createIngestRouter } from "./routes/ingest.js";
 import { createItemsRouter } from "./routes/items.js";
 import { createQueryRouter } from "./routes/query.js";
+import type { ConversationService } from "./services/conversations.js";
 import type { IngestionService } from "./services/ingestion.js";
 import type { QueryService } from "./services/query.js";
 
@@ -17,9 +19,10 @@ export interface AppDeps {
   ingestion: IngestionService;
   itemsRepo: ItemsRepo;
   queries: QueryService;
+  conversations: ConversationService;
 }
 
-export function createApp({ ingestion, itemsRepo, queries }: AppDeps) {
+export function createApp({ ingestion, itemsRepo, queries, conversations }: AppDeps) {
   const app = express();
   app.disable("x-powered-by");
 
@@ -29,7 +32,8 @@ export function createApp({ ingestion, itemsRepo, queries }: AppDeps) {
   app.use(healthRouter);
   app.use(createIngestRouter(ingestion));
   app.use(createItemsRouter(itemsRepo));
-  app.use(createQueryRouter(queries));
+  app.use(createQueryRouter(queries, conversations));
+  app.use(createConversationsRouter(conversations));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

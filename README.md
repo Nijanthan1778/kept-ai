@@ -10,6 +10,8 @@ Save short notes or web pages, then ask questions about them. Answers come from 
 - **Background ingestion.** `POST /ingest` returns `202 Accepted` immediately. Items move from `pending` to `ready` or `failed`, and the UI polls until they settle.
 - **Semantic search.** Text is chunked at paragraph boundaries, embedded with Gemini and stored as vectors in SQLite.
 - **Cited answers.** The model answers only from the retrieved sources and cites them as `[1]`, `[2]`. Each source card shows its snippet and similarity score, and whether the answer actually cited it.
+- **Chat-first UI.** The whole page is a conversation thread with the composer pinned at the bottom. Adding a note or URL opens a modal, and saved items open in a side drawer. Sources start collapsed under each answer; clicking a citation pill opens them and jumps to the cited passage.
+- **Chat history.** Every answered question is stored in SQLite as part of a conversation. A History drawer lists past conversations, newest activity first; you can reopen, continue or delete them, and they survive page refreshes. Each question is still answered on its own: the model doesn't see earlier turns.
 - **Debuggable.** Logs are structured JSON with a request ID on every request (also returned as `X-Request-Id`). Each pipeline stage is timed. All errors share one response shape.
 
 ## Tech stack
@@ -91,6 +93,7 @@ The body is either `{ "type": "note", "content": string }` (1–20,000 character
     "url": "https://en.wikipedia.org/wiki/Retrieval-augmented_generation",
     "title": null,
     "status": "pending",
+    "processingStage": null,
     "errorMessage": null,
     "createdAt": "2026-11-17T15:19:07.689Z",
     "preview": null
@@ -104,6 +107,16 @@ Problems found during background processing (unreachable page, private address, 
 
 The response is `200`: `{ "items": Item[] }`, newest first. Each item has the shape shown above. `preview` holds the first ~200 characters of the content; the full text is never sent.
 
+While an item is `pending`, `processingStage` says what its background job is doing: `fetching` (URLs only), `chunking`, `embedding` or `saving`, and `null` while it is still queued. It goes back to `null` once the item is `ready` or `failed`. The UI turns it into a progress bar and a label ("Embedding chunks…").
+
+### `DELETE /items/:id`
+
+Removes an item and its chunks. The response is `204 No Content`, `404 NOT_FOUND` if the item doesn't exist, or `400 VALIDATION_ERROR` if `id` isn't a UUID. It's safe to call while the item is still processing: the pipeline checks that the item still exists in the same transaction that would store its chunks, and stops if it's gone.
+
+```bash
+curl -i -X DELETE localhost:4000/items/9bdf8d95-12e4-4b95-a95a-d27aa75a6416
+```
+
 ### `POST /query`
 
 ```bash
@@ -111,10 +124,12 @@ curl -X POST localhost:4000/query -H 'content-type: application/json' \
   -d '{"question":"What problem does RAG solve?"}'
 ```
 
-The body is `{ "question": string }` (1–1,000 characters after trimming). The response is `200`:
+The body is `{ "question": string, "conversationId"?: string }`. The question is 1–1,000 characters after trimming. Pass `conversationId` to add the question to an existing conversation; leave it out to start a new one, titled after the question. An unknown `conversationId` returns `404`, and this is checked **before** any AI call. The response is `200`:
 
 ```json
 {
+  "conversationId": "6f1c2b9e-3d4a-4f5b-8c7d-1e2f3a4b5c6d",
+  "turnId": "0d3e5a7b-…",
   "answer": "RAG lets a language model draw on external documents at answer time, which reduces hallucinations and avoids retraining when information changes [1][2].",
   "sources": [
     {
@@ -135,6 +150,20 @@ The body is `{ "question": string }` (1–1,000 characters after trimming). The 
 `index` is the number used in the answer's `[n]` markers. `score` is the cosine similarity to the question. `cited` says whether the answer actually references that source; a source can be retrieved without being cited.
 
 If nothing is saved yet, or no chunk reaches `MIN_SIMILARITY`, the endpoint returns `"I couldn't find anything relevant in your saved content…"` with `sources: []` and **does not call the LLM**.
+
+Every successful answer is saved as a turn of the conversation, including "nothing relevant" answers. A request that fails (e.g. `502` when the AI service is down) saves nothing; the UI keeps the question on screen with a Retry button.
+
+### `GET /conversations`
+
+The response is `200`: `{ "conversations": [{ "id", "title", "turnCount", "createdAt", "updatedAt" }] }`, ordered by most recent activity.
+
+### `GET /conversations/:id`
+
+The response is `200`: `{ "conversation": { "id", "title", "createdAt", "updatedAt", "turns": [{ "id", "question", "answer", "sources", "createdAt" }] } }`, with turns in the order they were asked. Each turn's `sources` is a snapshot taken when it was answered, so old answers keep their citations even after the cited item is removed. Returns `404` for an unknown ID and `400` for an ID that isn't a UUID.
+
+### `DELETE /conversations/:id`
+
+Deletes the conversation and its turns. The response is `204`, or `404` if the conversation doesn't exist.
 
 ## Architecture
 
@@ -279,18 +308,22 @@ server/src/
   index.ts            bootstrap: builds the dependencies and starts the server
   app.ts              Express app: middleware, routes, error handler
   config.ts           environment loading and validation (fails fast)
-  routes/             ingest, items, query, health (thin)
+  routes/             ingest, items, query, conversations, health (thin)
   schemas/            zod request schemas
   services/           ingestion pipeline, extractor, pageFetcher, chunker,
-                      embeddings, retrieval, answer, query
+                      embeddings, retrieval, answer, query, conversations
   ai/client.ts        Gemini via the OpenAI SDK, retry policy, error mapping
-  db/                 connection, schema, itemsRepo, chunksRepo
-  domain/             shared item and chunk types
+  db/                 connection, schema, itemsRepo, chunksRepo, conversationsRepo
+  domain/             shared item, chunk, answer and conversation types
   lib/                errors, error handler, logging, retry, job queue, timing,
-                      vector maths, URL safety
-server/tests/         chunker, vector maths, URL safety, schemas, citations, ranking
+                      vector maths, URL safety, text titles
+server/tests/         chunker, vector maths, URL safety, schemas, citations, ranking,
+                      conversations (against an in-memory SQLite database)
 client/src/
   api/                typed fetch wrapper and response types
-  hooks/              useItems (pending-only polling), useAskQuestion, useAsyncAction
-  components/         IngestForm, ItemList, ItemStatusBadge, AskBox, AnswerView, SourceCard
+  hooks/              useItems (pending-only polling), useConversations (open chat + history), useAsyncAction
+  components/chat/    ChatThread, ChatTurnView, AnswerView, SourceCard, ChatComposer, ChatWelcome, HistorySheet
+  components/inbox/   AddContentDialog, IngestForm, SavedItemsSheet, ItemList, ItemRow, ItemStatusBadge
+  components/         AppHeader, Pill (shared status/tag chip)
+  lib/                formatting, processing-stage labels, question suggestions, link detection
 ```

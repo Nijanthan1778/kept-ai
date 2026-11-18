@@ -5,6 +5,7 @@ import type { ItemWithContent } from "../domain/item.js";
 import { AppError, IngestionError } from "../lib/errors.js";
 import { createJobQueue } from "../lib/jobQueue.js";
 import type { Logger } from "../lib/logger.js";
+import { firstLineTitle } from "../lib/text.js";
 import { timed } from "../lib/timing.js";
 import type { IngestRequest } from "../schemas/ingest.js";
 import { chunkText, type TextChunk } from "./chunker.js";
@@ -18,15 +19,7 @@ const UNEXPECTED_FAILURE_MESSAGE = "Something went wrong while processing this i
 
 /** A note's title is its first non-empty line, shortened, so sources are recognisable in answers. */
 export function deriveNoteTitle(content: string): string {
-  const firstLine =
-    content
-      .split("\n")
-      .find((line) => line.trim().length > 0)
-      ?.replace(/\s+/g, " ")
-      .trim() ?? "";
-  return firstLine.length > NOTE_TITLE_MAX_CHARS
-    ? `${firstLine.slice(0, NOTE_TITLE_MAX_CHARS - 1).trimEnd()}…`
-    : firstLine;
+  return firstLineTitle(content, NOTE_TITLE_MAX_CHARS);
 }
 
 /**
@@ -70,6 +63,7 @@ export function createIngestionService({
     if (!item.url) {
       throw new Error(`Item ${item.id} has neither content nor a URL`);
     }
+    itemsRepo.setProcessingStage(item.id, "fetching");
     const { value: extracted, ms } = await timed(() => fetchAndExtract(item.url!));
     stageMs.fetchMs = ms;
     itemsRepo.saveExtractedContent(item.id, { title: extracted.title, rawContent: extracted.text });
@@ -93,28 +87,39 @@ export function createIngestionService({
       }
       const { title, text } = await ensureContent(item, stageMs);
 
+      itemsRepo.setProcessingStage(itemId, "chunking");
       const { value: chunks, ms: chunkMs } = await timed(() => chunkText(text));
       stageMs.chunkMs = chunkMs;
       if (chunks.length === 0) {
         throw new IngestionError("This item has no text to index");
       }
 
+      itemsRepo.setProcessingStage(itemId, "embedding");
       const { value: vectors, ms: embedMs } = await timed(() =>
         embeddings.embedTexts(chunks.map((chunk) => textForEmbedding(title, chunk))),
       );
       stageMs.embedMs = embedMs;
 
+      itemsRepo.setProcessingStage(itemId, "saving");
       // Chunks and the `ready` status commit together: an item is never `ready` with missing chunks.
-      const { ms: storeMs } = await timed(() =>
+      const { value: stored, ms: storeMs } = await timed(() =>
         runInTransaction(() => {
+          // The user may have removed the item while it was being fetched or embedded.
+          if (!itemsRepo.exists(itemId)) return false;
           chunksRepo.replaceForItem(
             itemId,
             chunks.map((chunk, i) => ({ ...chunk, embedding: vectors[i]! })),
           );
           itemsRepo.markReady(itemId);
+          return true;
         }),
       );
       stageMs.storeMs = storeMs;
+
+      if (!stored) {
+        log.info({ stageMs }, "Item was removed during processing; discarded its chunks");
+        return;
+      }
 
       log.info(
         { chunkCount: chunks.length, contentChars: text.length, stageMs, totalMs: Math.round(performance.now() - started) },

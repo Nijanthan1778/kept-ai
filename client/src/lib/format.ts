@@ -23,3 +23,15 @@ export function hostname(url: string): string {
     return url
   }
 }
+
+/** An item's display name: its title, else the URL's host, else a placeholder for untitled notes. */
+export function itemTitle(item: { title: string | null; url: string | null }): string {
+  if (item.title) return item.title
+  if (item.url) return hostname(item.url)
+  return 'Untitled note'
+}
+
+/** A URL without its scheme and "www.", for compact display ("paulgraham.com/greatwork.html"). */
+export function displayUrl(url: string): string {
+  return url.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '')
+}

@@ -13,6 +13,16 @@ export function requiredString(field: string) {
   });
 }
 
+/** A UUID field, with a message naming what kind of ID it is ("item", "conversation"). */
+export function uuidField(field: string, entity: string) {
+  return z.uuid({ error: `${field} must be a valid ${entity} ID (UUID)` });
+}
+
+/** Route params `{ id }` holding the UUID of an `entity`. */
+export function idParamsSchema(entity: string) {
+  return z.object({ id: uuidField("id", entity) });
+}
+
 /** A required string, trimmed, that must be non-empty and at most `maxChars` long. */
 export function nonEmptyText(field: string, maxChars: number) {
   return requiredString(field)

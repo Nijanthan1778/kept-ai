@@ -1,5 +1,5 @@
+import type { QueryResult, QuerySource } from "../domain/answer.js";
 import type { ScoredChunk } from "../domain/chunk.js";
-import type { SourceType } from "../domain/item.js";
 import type { Logger } from "../lib/logger.js";
 import { timed } from "../lib/timing.js";
 import { findCitedSourceNumbers, type AnswerService } from "./answer.js";
@@ -8,25 +8,6 @@ import type { RetrievalService } from "./retrieval.js";
 
 export const NO_RELEVANT_CONTENT_ANSWER =
   "I couldn't find anything relevant in your saved content. Try rephrasing, or save a note or URL that covers it.";
-
-export interface QuerySource {
-  /** The 1-based number used for this source in the answer's [n] citations. */
-  index: number;
-  itemId: string;
-  chunkId: string;
-  title: string | null;
-  sourceType: SourceType;
-  url: string | null;
-  snippet: string;
-  score: number;
-  /** Whether the answer actually cites this source (it may have been retrieved but not used). */
-  cited: boolean;
-}
-
-export interface QueryResult {
-  answer: string;
-  sources: QuerySource[];
-}
 
 const NOTHING_FOUND: QueryResult = { answer: NO_RELEVANT_CONTENT_ANSWER, sources: [] };
 

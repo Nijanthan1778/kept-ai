@@ -1,4 +1,7 @@
-/** DOM id of a source card, so [n] citations in an answer can link and scroll to it. */
-export function sourceElementId(index: number): string {
-  return `source-${index}`
+/**
+ * DOM id of a source card, so [n] citations can link and scroll to it. Includes the chat turn,
+ * because every answer in the thread has its own sources numbered from 1.
+ */
+export function sourceElementId(turnId: string, index: number): string {
+  return `source-${turnId}-${index}`
 }
