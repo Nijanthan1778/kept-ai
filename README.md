@@ -4,13 +4,45 @@ Kept AI is an AI Knowledge Inbox built for the Turium AI Full Stack Developer as
 
 Save short notes or web pages, then ask questions about them. Answers come from a small RAG pipeline (chunk → embed → retrieve → generate) and cite the saved sources they were drawn from.
 
+**Contents:** [Assignment checklist](#assignment-checklist) · [Quick start](#quick-start) · [Using the app](#using-the-app) · [API](#api) · [Architecture](#architecture) · [Design decisions and tradeoffs](#design-decisions-and-tradeoffs) · [Troubleshooting](#troubleshooting) · [Project structure](#project-structure)
+
+## Assignment checklist
+
+How each requirement of the Turium AI brief is met:
+
+| Requirement | Where / how |
+|---|---|
+| **1. Content ingestion** | |
+| Add text notes | `POST /ingest` with `{ "type": "note" }`; the **Add → Note** modal |
+| Add URLs, fetched server-side | `{ "type": "url" }`; fetched with an SSRF guard, timeout and size cap, text extracted with Readability (`services/pageFetcher.ts`, `services/extractor.ts`) |
+| Store raw content and metadata (timestamp, source type) | `items` table: `raw_content`, `source_type`, `created_at`, `updated_at`, `status` |
+| No auth, single user | As specified |
+| **2. Semantic search and RAG** | |
+| Intentional chunking strategy | Recursive split on paragraphs → lines → sentences, ~2,000 chars with ~300 overlap ([rationale](#chunking)) |
+| Embeddings | Gemini `gemini-embedding-001`, batched with retry (`services/embeddings.ts`) |
+| Vector storage | SQLite BLOBs of normalised `Float32Array`s ([why](#vector-store-sqlite-and-brute-force-cosine-similarity)) |
+| Retrieve the top chunks for a question | Cosine similarity, `MIN_SIMILARITY` and `TOP_K`, calibrated on real scores (`services/retrieval.ts`) |
+| Pass context and question to the LLM | Numbered sources plus a grounding prompt (`services/answer.ts`) |
+| Answer with cited sources | `[n]` citations parsed into `sources[].cited`; shown as footnotes and source cards |
+| **3. Frontend** | |
+| Note / URL input | **Add** modal with Note and URL tabs, and live processing progress |
+| List saved items | **Saved items** drawer with status, errors and Remove |
+| Ask question interface | Chat composer, suggestions, conversation history |
+| Answer and source snippets | Answer with `[1, 2]` footnotes; "Show sources" opens snippet cards with scores |
+| React with hooks, reasonable state management | `useItems`, `useConversations` and `useAsyncAction` own server state; components get props |
+| **4. API design** | `POST /ingest`, `GET /items`, `POST /query` (plus delete and history endpoints), one error shape, zod validation, specific status codes ([API](#api)) |
+| **Tradeoff awareness** | Chunking, vector store, what breaks at scale and production changes are all in [Design decisions and tradeoffs](#design-decisions-and-tradeoffs) |
+| **Debuggability** | Structured pino logs with request IDs and per-stage timings; user-facing error messages; 202/204/400/404/413/502/500 |
+| **Code quality** | Routes → services → repositories; small single-purpose files; 108 unit tests |
+| **Tech constraints** | Node + Express, OpenAI-SDK-compatible API (Gemini), SQLite, React + Tailwind + shadcn; no auth, no containers or extra infrastructure |
+
 ## Features
 
 - **Save notes and URLs.** Pages are fetched server-side, with protection against server-side request forgery (SSRF), and the readable text is extracted.
 - **Background ingestion.** `POST /ingest` returns `202 Accepted` immediately. Items move from `pending` to `ready` or `failed`, and the UI polls until they settle.
 - **Semantic search.** Text is chunked at paragraph boundaries, embedded with Gemini and stored as vectors in SQLite.
 - **Cited answers.** The model answers only from the retrieved sources and cites them as `[1]`, `[2]`. Each source card shows its snippet and similarity score, and whether the answer actually cited it.
-- **Chat-first UI.** The whole page is a conversation thread with the composer pinned at the bottom. Adding a note or URL opens a modal, and saved items open in a side drawer. Sources start collapsed under each answer; clicking a citation pill opens them and jumps to the cited passage.
+- **Chat-first UI.** The whole page is a conversation thread with the composer pinned at the bottom. Adding a note or URL opens a modal, and saved items open in a side drawer. Sources start collapsed under each answer; clicking a citation number opens them and jumps to the cited passage. It works from 320 px phones to desktop.
 - **Chat history.** Every answered question is stored in SQLite as part of a conversation. A History drawer lists past conversations, newest activity first; you can reopen, continue or delete them, and they survive page refreshes. Each question is still answered on its own: the model doesn't see earlier turns.
 - **Debuggable.** Logs are structured JSON with a request ID on every request (also returned as `X-Request-Id`). Each pipeline stage is timed. All errors share one response shape.
 
@@ -26,17 +58,28 @@ Save short notes or web pages, then ask questions about them. Answers come from 
 | Frontend | React 19, Vite, Tailwind CSS v4, shadcn/ui |
 | Tests | `vitest` |
 
-## Setup
+## Quick start
 
-You need Node.js 20.12 or newer (developed on Node 24) and a Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey). The free tier is enough.
+### Prerequisites
+
+- **Node.js 22.12 or newer** (developed and tested on Node 24). `better-sqlite3` and `vitest` don't support older versions. Check with `node -v`.
+- **npm 10+** (comes with Node), and **Git**.
+- **A Gemini API key.** It's free: sign in at [Google AI Studio](https://aistudio.google.com/apikey) and choose *Create API key*. No billing is needed for the free tier.
+- Internet access (for `npm install`, the Gemini API and fetching saved URLs).
+
+### Run it
 
 ```bash
-npm install
-cp server/.env.example server/.env   # then set AI_API_KEY
-npm run dev                          # API on :4000, UI on http://localhost:5173
+git clone https://github.com/Nijanthan1778/kept-ai.git
+cd kept-ai
+npm install                          # installs the server and client (npm workspaces)
+cp server/.env.example server/.env   # then open server/.env and paste your key after AI_API_KEY=
+npm run dev                          # API on http://localhost:4000, UI on http://localhost:5173
 ```
 
-The server refuses to start if the configuration is invalid, for example if `AI_API_KEY` is missing.
+Open **http://localhost:5173**. The SQLite database is created automatically at `server/data/kept.db` on first start; there's nothing else to install or migrate.
+
+The server refuses to start if the configuration is invalid. For example, without a key it prints `AI_API_KEY: is required. Get a key from Google AI Studio and set it in server/.env` and exits. After editing `server/.env`, restart `npm run dev`.
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -52,12 +95,33 @@ The server refuses to start if the configuration is invalid, for example if `AI_
 Other commands:
 
 ```bash
-npm test            # server unit tests
+npm test            # server unit tests (108; no API key or network needed)
 npm run typecheck   # server + client
 npm run build       # compile server to server/dist, bundle client to client/dist
 ```
 
 **Model note:** the default chat model is `gemini-3.5-flash-lite`, not `gemini-2.5-flash`. Google deprecated `gemini-2.5-flash` with a shutdown date of 2026-12-01 and lists `gemini-3.5-flash-lite` as its replacement. Any chat model on the endpoint works through `CHAT_MODEL`.
+
+## Using the app
+
+**1. Add something to your inbox.** Click **+ Add** (top right).
+- **Note tab:** type or paste text (up to 20,000 characters) and click **Save note**. The first line becomes its title.
+- **URL tab:** paste a link such as `https://en.wikipedia.org/wiki/Retrieval-augmented_generation` and click **Save URL**. The server downloads the page and keeps its readable text.
+- The modal shows live progress (*Fetching page → Splitting into chunks → Embedding chunks → Saving*) and closes by itself once the item is **Ready**. If something goes wrong, for example the page needs JavaScript or the link is private, it explains why.
+- If you paste only a link into the Note tab, it offers **Save as URL**, so the page is fetched instead of the link being saved as text.
+
+**2. Ask a question.** Type in the box at the bottom and press **Enter** (Shift+Enter adds a new line), or click one of the suggested questions.
+- The answer is built **only** from your saved content. If nothing relevant is saved, it says so instead of guessing.
+- Numbers like **[1, 2]** after a sentence are citations. Click a number, or **Show sources**, to see the exact passages used. Each card shows its similarity score and whether the answer cited it.
+
+**3. Manage your content.** **Saved items** opens a drawer listing everything you've saved, with its status (Processing, Ready or Failed), the reason for any failure, and a **Remove** button.
+
+**4. Revisit conversations.** **History** lists past conversations; click one to reopen and continue it, or use the trash icon to delete it. **New chat** starts a fresh conversation. Each question is answered on its own, so follow-ups like "tell me more about that" should name the topic.
+
+**Good to know**
+- Items become searchable only once they show **Ready**.
+- Pages built with JavaScript (many Framer, Wix or single-page-app sites), pages behind a login, and PDFs can't be read. Copy their text into a note instead.
+- Removing an item removes it from future answers. Old answers in History keep the snippets they were based on.
 
 ## API
 
@@ -171,8 +235,8 @@ Deletes the conversation and its turns. The response is `204`, or `404` if the c
                       ┌────────────── server ──────────────────────────────────────┐
 React UI ── /api ──▶  │ routes/   validate (zod) → call service → respond          │
  (Vite proxy)         │ services/ ingestion · extractor · chunker · embeddings     │
-                      │           retrieval · answer · query                       │
-                      │ db/       itemsRepo · chunksRepo (all SQL lives here)      │
+                      │           retrieval · answer · query · conversations       │
+                      │ db/       items · chunks · conversations repos (all SQL)   │
                       │ ai/       one OpenAI-SDK client pointed at Gemini          │
                       │ lib/      errors · logging · retry · job queue · URL safety│
                       └────────────────────────────────────────────────────────────┘
@@ -294,12 +358,28 @@ User-supplied URLs are fetched by the server, so `lib/urlSafety.ts` checks that 
 ### Known limitations
 
 - **Retrieval thresholds are tuned on a small sample** (see "Retrieval rules"). They work for the tested content, but there's no evaluation set behind them.
-- **Error paths tested against stubs.** The happy path was tested against the real Gemini API (batched embeddings, retrieval, cited answers). Rate-limit retries, 401/404 handling and empty responses were tested against local OpenAI-compatible stubs that return those errors, since they can't be triggered on demand.
+- **Some error paths tested against stubs.** The happy path (batched embeddings, retrieval, cited answers) and the invalid-key error were tested against the real Gemini API. Rate-limit retries, timeouts and empty responses were tested against local OpenAI-compatible stubs, since they can't be triggered on demand; the error mapping itself is unit-tested.
 - **JavaScript-rendered pages.** Single-page apps and pages behind logins come back with almost no text and are marked `failed` with that explanation. There's no headless browser.
 - **Unsupported content.** PDFs and other non-HTML content are rejected.
 - **Single user, no auth.** This is by design for the assignment.
 - **DNS rebinding.** The SSRF check resolves DNS, then `fetch()` resolves it again. A hostile DNS server could answer differently the second time. The production fix is pinning the checked IP in the HTTP agent.
 - **Plain-text answers.** Answers are not rendered as Markdown. The prompt asks for plain text, but if the model writes Markdown anyway it's shown as-is.
+
+## Troubleshooting
+
+| Symptom | Cause and fix |
+|---|---|
+| `npm install` fails building `better-sqlite3`, or `npm test` complains about the Node version | Node is older than 22.12. Upgrade Node, delete `node_modules`, run `npm install` again. |
+| Server exits with `AI_API_KEY: is required…` | `server/.env` is missing or the key is empty. Run `cp server/.env.example server/.env` and paste your key. |
+| Items fail with "The AI service rejected the API key" | The key is wrong or was revoked. Create a new one in Google AI Studio, update `server/.env`, and restart. |
+| "The AI service rate limit was reached" | The free tier allows a limited number of requests per minute. Wait a minute and try again. |
+| "The configured AI model was not found" | A model in `.env` isn't available to your key. Use the defaults from `.env.example`. |
+| `EADDRINUSE` on port 4000 or 5173 | Something else uses the port. Stop it, or set `PORT` in `server/.env` and start with `API_TARGET=http://localhost:<PORT> npm run dev` so the UI's proxy follows. |
+| A URL ends as Failed: "Couldn't find readable text…" | The page builds its content with JavaScript or needs a login. Paste the text as a note instead. |
+| Unrelated questions still list sources | `MIN_SIMILARITY` in `server/.env` is lower than the calibrated `0.55`. |
+| `npm install` reports moderate vulnerabilities | They come from the shadcn CLI's development tooling, which isn't shipped to the browser. `npm audit fix --force` would break the setup; leave them. |
+
+To start over with an empty inbox, stop the server and delete `server/data/` (it's recreated on the next start).
 
 ## Project structure
 
@@ -318,12 +398,14 @@ server/src/
   lib/                errors, error handler, logging, retry, job queue, timing,
                       vector maths, URL safety, text titles
 server/tests/         chunker, vector maths, URL safety, schemas, citations, ranking,
-                      conversations (against an in-memory SQLite database)
+                      AI error mapping, conversations (against an in-memory SQLite database)
 client/src/
   api/                typed fetch wrapper and response types
   hooks/              useItems (pending-only polling), useConversations (open chat + history), useAsyncAction
   components/chat/    ChatThread, ChatTurnView, AnswerView, SourceCard, ChatComposer, ChatWelcome, HistorySheet
-  components/inbox/   AddContentDialog, IngestForm, SavedItemsSheet, ItemList, ItemRow, ItemStatusBadge
+  components/inbox/   AddContentDialog, IngestForm, SaveProgress, SavedItemsSheet, ItemList, ItemRow,
+                      ItemIcon, ItemStatusBadge, ProcessingBar
   components/         AppHeader, Pill (shared status/tag chip)
-  lib/                formatting, processing-stage labels, question suggestions, link detection
+  lib/                formatting, processing-stage labels, question suggestions, link detection,
+                      drawer width
 ```

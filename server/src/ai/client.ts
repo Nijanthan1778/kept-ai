@@ -53,6 +53,10 @@ export function toUpstreamError(err: unknown): UpstreamError {
     return new UpstreamError("Could not reach the AI service. Check your network connection.", { cause: err });
   }
   if (err instanceof OpenAI.APIError) {
+    // Gemini answers a bad key with 400 "Please pass a valid API key" (OpenAI would send 401).
+    if (err.status === 400 && /api key/i.test(err.message)) {
+      return new UpstreamError("The AI service rejected the API key. Check AI_API_KEY.", { cause: err });
+    }
     switch (err.status) {
       case 401:
       case 403:
